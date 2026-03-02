@@ -30,8 +30,10 @@ class VideoProcessor:
         self.last_names = []
 
     def recv(self, frame):
-        img = frame.to_ndarray(format="bgr24")
-        self.frame_count += 1
+    img = frame.to_ndarray(format="bgr24")
+    
+    if not known_encs:  # ← ADD THIS GUARD
+        return frame.from_ndarray(img, format="bgr24")
 
         # ONLY process every 5th frame to save 80% CPU
         if self.frame_count % 5 == 0:
@@ -61,5 +63,6 @@ class VideoProcessor:
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
 
         return frame.from_ndarray(img, format="bgr24")
+
 
 webrtc_streamer(key="fast-rec", video_processor_factory=VideoProcessor)
