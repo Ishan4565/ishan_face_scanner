@@ -4,12 +4,13 @@ FROM python:3.11-slim
 # Step 2: Set the working directory inside the container
 WORKDIR /app
 
-# Step 3: Install the "Missing" Linux tools (C++ compiler and CMake)
+# Step 3: Install the Updated Linux tools
 RUN apt-get update && apt-get install -y \
     build-essential \
     cmake \
     g++ \
-    libgl1-mesa-glx \
+    libgl1 \
+    libglx-mesa0 \
     libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
