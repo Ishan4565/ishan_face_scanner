@@ -8,8 +8,6 @@ RUN apt-get update && apt-get install -y \
     libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
-# Remove build-essential and cmake entirely — not needed anymore!
-
 COPY requirements.txt .
 RUN pip install --upgrade pip
 RUN pip install --no-cache-dir -r requirements.txt
@@ -20,17 +18,3 @@ COPY dataset/ ./dataset/
 EXPOSE 8501
 CMD ["streamlit", "run", "app.py", "--server.port=8501", "--server.address=0.0.0.0"]
 ```
-
-Key changes:
-- **Removed** `build-essential`, `cmake` — dlib needed these, DeepFace doesn't
-- **Separate COPY** for app.py and dataset (Docker layer caching)
-
----
-
-### ✅ .dockerignore (create this file)
-```
-.git/
-*.md
-__pycache__/
-*.pyc
-.env
