@@ -82,12 +82,3 @@ webrtc_streamer(
     media_stream_constraints={"video": True, "audio": False},
     async_processing=True,
 )
-```
-
-Also update `requirements.txt` — remove mediapipe completely since we no longer need it:
-```
-streamlit
-streamlit-webrtc
-opencv-python-headless
-numpy
-av
