@@ -4,46 +4,35 @@ import cv2
 import numpy as np
 import os
 from datetime import datetime
-import mediapipe as mp
 
 DATASET_PATH = os.path.join("dataset", "Ishan")
 st.title("Ishan Face Scanner 🚀")
 
-face_detection = mp.solutions.face_detection
+face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
 
 @st.cache_resource
 def load_known_embeddings():
     embeddings = []
     names = []
     if not os.path.exists(DATASET_PATH):
+        st.warning("Dataset folder not found!")
         return embeddings, names
-    with face_detection.FaceDetection(
-        model_selection=0, min_detection_confidence=0.5
-    ) as detector:
-        for filename in os.listdir(DATASET_PATH):
-            if not filename.lower().endswith((".jpg", ".png", ".jpeg")):
-                continue
-            img = cv2.imread(os.path.join(DATASET_PATH, filename))
-            if img is None:
-                continue
-            rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-            results = detector.process(rgb)
-            if not results.detections:
-                continue
-            d = results.detections[0]
-            bb = d.location_data.relative_bounding_box
-            h, w = img.shape[:2]
-            x1 = max(0, int(bb.xmin * w))
-            y1 = max(0, int(bb.ymin * h))
-            x2 = min(w, int((bb.xmin + bb.width) * w))
-            y2 = min(h, int((bb.ymin + bb.height) * h))
-            face_crop = rgb[y1:y2, x1:x2]
-            if face_crop.size == 0:
-                continue
-            face_resized = cv2.resize(face_crop, (64, 64)).flatten().astype(np.float32)
-            face_norm = face_resized / (np.linalg.norm(face_resized) + 1e-6)
-            embeddings.append(face_norm)
-            names.append("Ishan")
+    for filename in os.listdir(DATASET_PATH):
+        if not filename.lower().endswith((".jpg", ".png", ".jpeg")):
+            continue
+        img = cv2.imread(os.path.join(DATASET_PATH, filename))
+        if img is None:
+            continue
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        faces = face_cascade.detectMultiScale(gray, 1.1, 4)
+        if len(faces) == 0:
+            continue
+        x, y, w, h = faces[0]
+        face_crop = img[y:y+h, x:x+w]
+        face_resized = cv2.resize(face_crop, (64, 64)).flatten().astype(np.float32)
+        face_norm = face_resized / (np.linalg.norm(face_resized) + 1e-6)
+        embeddings.append(face_norm)
+        names.append("Ishan")
     return embeddings, names
 
 known_embeddings, known_names = load_known_embeddings()
@@ -53,9 +42,6 @@ class VideoProcessor:
         self.frame_count = 0
         self.last_boxes = []
         self.last_names = []
-        self.detector = face_detection.FaceDetection(
-            model_selection=0, min_detection_confidence=0.5
-        )
 
     def recv(self, frame):
         img = frame.to_ndarray(format="bgr24")
@@ -63,30 +49,23 @@ class VideoProcessor:
 
         if self.frame_count % 8 == 0:
             small = cv2.resize(img, (0, 0), fx=0.5, fy=0.5)
-            rgb = cv2.cvtColor(small, cv2.COLOR_BGR2RGB)
-            results = self.detector.process(rgb)
+            gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
+            faces = face_cascade.detectMultiScale(gray, 1.1, 4, minSize=(30, 30))
             self.last_boxes = []
             self.last_names = []
 
-            if results.detections:
-                h, w = small.shape[:2]
-                for detection in results.detections:
-                    bb = detection.location_data.relative_bounding_box
-                    x1 = max(0, int(bb.xmin * w))
-                    y1 = max(0, int(bb.ymin * h))
-                    x2 = min(w, int((bb.xmin + bb.width) * w))
-                    y2 = min(h, int((bb.ymin + bb.height) * h))
-                    face_crop = rgb[y1:y2, x1:x2]
-                    name = "Unknown"
-                    if face_crop.size > 0 and known_embeddings:
-                        face_resized = cv2.resize(face_crop, (64, 64)).flatten().astype(np.float32)
-                        face_norm = face_resized / (np.linalg.norm(face_resized) + 1e-6)
-                        sims = [np.dot(face_norm, ke) for ke in known_embeddings]
-                        best_idx = int(np.argmax(sims))
-                        if sims[best_idx] > 0.75:
-                            name = known_names[best_idx]
-                    self.last_boxes.append((x1*2, y1*2, x2*2, y2*2))
-                    self.last_names.append(name)
+            for (x, y, w, h) in faces:
+                face_crop = small[y:y+h, x:x+w]
+                name = "Unknown"
+                if face_crop.size > 0 and known_embeddings:
+                    face_resized = cv2.resize(face_crop, (64, 64)).flatten().astype(np.float32)
+                    face_norm = face_resized / (np.linalg.norm(face_resized) + 1e-6)
+                    sims = [np.dot(face_norm, ke) for ke in known_embeddings]
+                    best_idx = int(np.argmax(sims))
+                    if sims[best_idx] > 0.75:
+                        name = known_names[best_idx]
+                self.last_boxes.append((x*2, y*2, (x+w)*2, (y+h)*2))
+                self.last_names.append(name)
 
         now = datetime.now().strftime("%H:%M:%S")
         for (x1, y1, x2, y2), name in zip(self.last_boxes, self.last_names):
@@ -103,3 +82,12 @@ webrtc_streamer(
     media_stream_constraints={"video": True, "audio": False},
     async_processing=True,
 )
+```
+
+Also update `requirements.txt` — remove mediapipe completely since we no longer need it:
+```
+streamlit
+streamlit-webrtc
+opencv-python-headless
+numpy
+av
