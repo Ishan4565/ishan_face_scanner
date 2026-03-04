@@ -8,7 +8,7 @@ WORKDIR /app
 
 COPY --chown=user requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt --verbose > /tmp/pip.log 2>&1 || (cat /tmp/pip.log && exit 1)
 
 COPY --chown=user app.py .
 COPY --chown=user dataset/ ./dataset/
