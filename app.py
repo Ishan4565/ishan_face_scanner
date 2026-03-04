@@ -3,79 +3,81 @@ from streamlit_webrtc import webrtc_streamer
 import cv2
 import numpy as np
 import os
-from deepface import DeepFace
+import pickle
 from datetime import datetime
-import av
+import insightface
+from insightface.app import FaceAnalysis
 
 DATASET_PATH = os.path.join("dataset", "Ishan")
-DB_PATH = "dataset"  # DeepFace searches recursively
+EMBEDDINGS_FILE = "embeddings.pkl"
 
 st.title("Ishan Face Scanner 🚀")
+
+@st.cache_resource
+def load_model():
+    app = FaceAnalysis(name="buffalo_sc", providers=["CPUExecutionProvider"])
+    app.prepare(ctx_id=0, det_size=(320, 320))
+    return app
+
+@st.cache_resource
+def get_known_embeddings(_app):
+    embeddings = []
+    names = []
+    if os.path.exists(DATASET_PATH):
+        for filename in os.listdir(DATASET_PATH):
+            if filename.lower().endswith((".jpg", ".png", ".jpeg")):
+                img = cv2.imread(os.path.join(DATASET_PATH, filename))
+                if img is None:
+                    continue
+                faces = _app.get(img)
+                if faces:
+                    embeddings.append(faces[0].normed_embedding)
+                    names.append("Ishan")
+    return embeddings, names
+
+face_app = load_model()
+known_embeddings, known_names = get_known_embeddings(face_app)
 
 class VideoProcessor:
     def __init__(self):
         self.frame_count = 0
-        self.last_locations = []
+        self.last_boxes = []
         self.last_names = []
 
     def recv(self, frame):
         img = frame.to_ndarray(format="bgr24")
         self.frame_count += 1
 
-        if self.frame_count % 10 == 0:  # process every 10th frame
+        if self.frame_count % 8 == 0:
             small = cv2.resize(img, (0, 0), fx=0.5, fy=0.5)
+            faces = face_app.get(small)
 
-            try:
-                results = DeepFace.find(
-                    img_path=small,
-                    db_path=DB_PATH,
-                    model_name="Facenet",       # lightweight & accurate
-                    detector_backend="opencv",  # fastest detector
-                    enforce_detection=False,
-                    silent=True
-                )
+            self.last_boxes = []
+            self.last_names = []
 
-                self.last_locations = []
-                self.last_names = []
+            for face in faces:
+                embedding = face.normed_embedding
+                name = "Unknown"
 
-                for result_df in results:
-                    if not result_df.empty:
-                        # Get face region from DeepFace result
-                        row = result_df.iloc[0]
-                        identity = row["identity"]
+                if known_embeddings:
+                    sims = [np.dot(embedding, ke) for ke in known_embeddings]
+                    best_idx = int(np.argmax(sims))
+                    if sims[best_idx] > 0.35:
+                        name = known_names[best_idx]
 
-                        # Extract name from path
-                        name = os.path.basename(os.path.dirname(identity))
+                box = face.bbox.astype(int) * 2  # scale back up
+                self.last_boxes.append(box)
+                self.last_names.append(name)
 
-                        # Get facial area if available
-                        if "source_x" in row:
-                            x = int(row["source_x"] * 2)  # scale back up
-                            y = int(row["source_y"] * 2)
-                            w = int(row["source_w"] * 2)
-                            h = int(row["source_h"] * 2)
-                            self.last_locations.append((x, y, w, h))
-                        else:
-                            self.last_locations.append(None)
-
-                        self.last_names.append(name)
-
-            except Exception:
-                # No face detected or DB error — just skip
-                pass
-
-        # Draw results on every frame
         now = datetime.now().strftime("%H:%M:%S")
-        for loc, name in zip(self.last_locations, self.last_names):
-            if loc is None:
-                continue
-            x, y, w, h = loc
+        for box, name in zip(self.last_boxes, self.last_names):
+            x1, y1, x2, y2 = box
             color = (0, 255, 0) if name == "Ishan" else (0, 0, 255)
-            cv2.rectangle(img, (x, y), (x + w, y + h), color, 2)
-            cv2.putText(img, f"{name} | {now}", (x, y - 10),
+            cv2.rectangle(img, (x1, y1), (x2, y2), color, 2)
+            cv2.putText(img, f"{name} | {now}", (x1, y1 - 10),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
 
         return frame.from_ndarray(img, format="bgr24")
-
 
 webrtc_streamer(
     key="face-scanner",
