@@ -1,4 +1,4 @@
-FROM python:3.10-slim
+FROM python:3.11-bookworm
 
 RUN useradd -m -u 1000 user
 USER user
@@ -13,5 +13,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY --chown=user app.py .
 COPY --chown=user dataset/ ./dataset/
 
-EXPOSE 8501
-CMD ["streamlit", "run", "app.py", "--server.port=8501", "--server.address=0.0.0.0"]
+EXPOSE 7860
+CMD ["streamlit", "run", "app.py", "--server.port=7860", "--server.address=0.0.0.0"]
