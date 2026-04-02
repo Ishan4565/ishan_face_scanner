@@ -307,7 +307,7 @@ def recognize_face(input_embedding):
 
 - **Email:** ishandh454@gmail.com
 - **GitHub:** Ishan4565
-- **LinkedIn:** [Your LinkedIn]
+- **LinkedIn:**https://www.linkedin.com/in/ishan-dhakal-2b1933376/
 
 ---
 
